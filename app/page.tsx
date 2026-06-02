@@ -6,7 +6,7 @@ const USER_ID_KEY = "siamsi_user_id";
 const TODAY_DRAW_KEY = "siamsi_today_draw";
 const HISTORY_KEY = "siamsi_history";
 const TOTAL_FORTUNES = 30;
-const SHAKE_TARGET = 950;
+const SHAKE_TARGET = 2500;
 
 type View = "shake" | "dropping" | "reveal";
 
@@ -410,7 +410,7 @@ export default function Home() {
         Math.abs(acceleration?.z ?? 0);
 
       if (force > 34 && view === "shake") {
-        addShake(force * 5, force % 2 === 0 ? 12 : -12);
+        addShake(force * 2, force % 2 === 0 ? 12 : -12);
       }
     };
 
@@ -439,7 +439,7 @@ export default function Home() {
     const velocity = distance / elapsed;
 
     if (distance > 3) {
-      addShake(distance * (1 + velocity * 5), dx * 0.55);
+      addShake(distance * (1.5 + velocity), dx * 0.55);
       lastPoint.current = {
         x: event.clientX,
         y: event.clientY,
@@ -574,7 +574,7 @@ export default function Home() {
             <SiamsiSVG />
           </div>
 
-          <button className="shake-cta" type="button" onClick={() => addShake(210, tilt >= 0 ? -15 : 15)}>
+          <button className="shake-cta" type="button" onClick={() => addShake(150, tilt >= 0 ? -15 : 15)}>
             <HandIcon />
             <span>
               <strong>เขย่าเซียมซี</strong>
