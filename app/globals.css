@@ -545,7 +545,8 @@ button {
   color: #c28b74;
   font-size: 0.88rem;
   line-height: 1.25;
-  text-wrap: balance;
+  text-wrap: nowrap;
+  white-space: nowrap;
 }
 
 .shake-progress {
@@ -1129,45 +1130,45 @@ button {
 
 @media (min-width: 701px) and (max-height: 790px) {
   .top-actions {
-    inset: 1rem 1.45rem auto;
+    inset: 0.8rem 1rem auto;
   }
 
   .round-action {
-    width: 4.6rem;
+    width: 2.65rem;
   }
 
   .history-action {
-    min-width: 5.2rem;
-    min-height: 5.2rem;
-    font-size: 1rem;
+    min-width: 5.15rem;
+    min-height: 2.65rem;
+    border-radius: 999px;
+    font-size: 0.92rem;
   }
 
   .shake-view {
-    justify-content: flex-start;
-    gap: 0.6rem;
-    padding-top: 4.15rem;
-    padding-bottom: 1rem;
+    gap: 0.45rem;
+    padding-top: 3.7rem;
+    padding-bottom: 0.75rem;
   }
 
   .ornament svg {
-    width: 1.8rem;
-    height: 1.8rem;
+    width: 1.45rem;
+    height: 1.45rem;
   }
 
   .title-block h1 {
-    margin-top: 0.65rem;
-    font-size: clamp(2.65rem, 4.5vw, 3.75rem);
-    line-height: 1.18;
+    margin-top: 0.5rem;
+    font-size: clamp(2.05rem, 4vw, 2.45rem);
+    line-height: 1.1;
   }
 
   .title-block p {
-    margin-top: 0.6rem;
-    font-size: clamp(1rem, 1.55vw, 1.28rem);
+    margin-top: 0.35rem;
+    font-size: 1rem;
   }
 
   .siamsi-stage {
-    width: min(78%, 24rem);
-    margin-top: -0.2rem;
+    width: min(90%, 21.25rem);
+    margin-top: 0;
   }
 
   .fortune-stick {
@@ -1211,31 +1212,33 @@ button {
   }
 
   .shake-cta {
-    width: min(80%, 28rem);
-    min-height: 4.85rem;
-    grid-template-columns: 3.6rem 1fr 3.2rem;
-    margin-top: 0.4rem;
+    width: min(100%, 21.5rem);
+    max-width: 21.5rem;
+    min-height: 4rem;
+    grid-template-columns: 2.7rem 1fr 2.35rem;
+    margin-top: 0;
   }
 
   .shake-cta::before {
-    inset: 0.48rem;
+    inset: 0.42rem;
   }
 
   .shake-cta strong {
-    font-size: 1.25rem;
+    font-size: 1.18rem;
   }
 
   .shake-cta small {
-    font-size: 0.9rem;
+    font-size: 0.82rem;
   }
 
   .shake-cta svg {
-    width: 2rem;
-    height: 2rem;
+    width: 1.9rem;
+    height: 1.9rem;
   }
 
   .shake-progress {
-    display: none;
+    display: block;
+    width: min(76%, 17rem);
   }
 }
 
