@@ -1,6 +1,5 @@
 "use client";
 
-import html2canvas from "html2canvas";
 import { PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const USER_ID_KEY = "siamsi_user_id";
@@ -462,13 +461,13 @@ export default function Home() {
     setShareState("กำลังสร้างรูป…");
 
     try {
+      const { default: html2canvas } = await import("html2canvas");
       const canvas = await html2canvas(fortunePaperRef.current, {
         backgroundColor: "#FFF9EE",
         scale: 2,
         useCORS: true,
         logging: false,
-        onclone: (_doc, el) => {
-          // Remove animation so the cloned element doesn't restart from opacity:0
+        onclone: (_doc: Document, el: HTMLElement) => {
           el.style.animation = "none";
           el.style.opacity = "1";
           el.style.transform = "none";
