@@ -5,10 +5,15 @@ import { PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from 
 const USER_ID_KEY = "siamsi_user_id";
 const TODAY_DRAW_KEY = "siamsi_today_draw";
 const HISTORY_KEY = "siamsi_history";
-const TOTAL_FORTUNES = 30;
+const TUTORIAL_HIDDEN_KEY = "siamsi_tutorial_hidden";
+const TOTAL_FORTUNES = 20;
 const SHAKE_TARGET = 2500;
 
 type View = "shake" | "dropping" | "reveal";
+type MotionPermission = "unknown" | "requesting" | "granted" | "denied" | "unsupported";
+type DeviceMotionEventConstructor = typeof DeviceMotionEvent & {
+  requestPermission?: () => Promise<PermissionState>;
+};
 
 type DailyDraw = {
   date: string;
@@ -23,6 +28,16 @@ type Fortune = {
   number: number;
   title: string;
   text: string;
+  closing: string;
+};
+
+type ClearFortune = {
+  title: string;
+  summary: string;
+  work: string;
+  money: string;
+  love: string;
+  health: string;
   closing: string;
 };
 
@@ -209,6 +224,189 @@ const fortunes: Fortune[] = [
   },
 ];
 
+const clearFortunes: Record<number, ClearFortune> = {
+  1: {
+    title: "วันนี้เริ่มได้แล้ว เลิกวอร์มจนเหงื่อแห้ง",
+    summary: "วันนี้ดวงเหมาะกับการเริ่มเรื่องที่ค้างมานาน ไม่ต้องรอ mood perfect เพราะ mood นั้นลาออกไปตั้งแต่เช้าแล้ว",
+    work: "งานเดินถ้าตัดงานใหญ่เป็นชิ้นเล็ก ๆ ส่ง draft ก่อน อย่ารอให้มันสวยระดับพิพิธภัณฑ์แล้วค่อยกล้าส่ง",
+    money: "เงินยังพอจัดการได้ แต่ของลดราคาที่ไม่ได้อยากได้จริงคือกับดักหน้าตาดี อย่าพุ่งใส่เหมือนเห็นรักแท้",
+    love: "ความรักต้องพูดตรง ๆ มากขึ้น คนอื่นไม่ได้มี subtitle อ่านใจคุณนะคะ",
+    health: "ระวังนอนดึกและตาล้า พักสายตาบ้าง มือถือไม่ได้เหงาถ้าคุณวางมันลงสิบนาที",
+    closing: "เริ่มแบบไม่พร้อม ดีกว่าพร้อมมากแต่ยังไม่เริ่ม",
+  },
+  2: {
+    title: "งานค้างไม่ใช่สัตว์เลี้ยง อย่าเลี้ยงมันนาน",
+    summary: "วันนี้มีเรื่องที่ควรสะสางให้จบ ดวงไม่ได้แย่ แต่จะเหนื่อยเพราะคุณชอบเลื่อนปัญหาไปนัดหน้าเหมือนมันเป็นเพื่อนสนิท",
+    work: "เลือกงานที่สำคัญสุดหนึ่งอย่างแล้วปิดให้จบก่อน งานอื่นค่อยตามมา อย่าเปิดสิบแท็บแล้วเรียกว่าขยัน",
+    money: "รายจ่ายเล็ก ๆ รวมกันแล้วเสียงดังมาก เช็ก subscription กับของจุกจิกหน่อย เงินหายไม่ใช่ไสยศาสตร์",
+    love: "คนมีคู่ควรตอบให้ชัด ไม่ใช่ส่งสติกเกอร์หนีบทสนทนา คนโสดอย่าเดาใจคนอื่นจากการตอบช้าแค่ครั้งเดียว",
+    health: "คอบ่าไหล่มาแน่ถ้ายังนั่งท่าเดิมทั้งวัน ลุกยืดหน่อย ร่างกายไม่ได้เป็นเฟอร์นิเจอร์",
+    closing: "สิ่งที่คุณเลี่ยงอยู่ ไม่ได้ยากเท่าความพยายามในการเลี่ยง",
+  },
+  3: {
+    title: "ดวงงานดี แต่ต้องหยุดทำตัวเป็นฝ่ายประชาสัมพันธ์ความเหนื่อย",
+    summary: "วันนี้มีโอกาสให้คนเห็นฝีมือ แต่ต้องโชว์งานจริง ไม่ใช่โชว์ว่าชีวิตวุ่นแค่ไหน",
+    work: "เหมาะกับการคุยงาน เสนอไอเดีย หรือส่งผลงาน คนจะฟังถ้าคุณพูดเป็นประเด็น ไม่ใช่เริ่มจากบ่นก่อนสามนาที",
+    money: "มีช่องทางได้เงินจากทักษะที่มีอยู่ อย่าดูถูกของที่ตัวเองทำเป็น เพราะคนอื่นอาจยอมจ่ายให้สิ่งนั้น",
+    love: "เสน่ห์วันนี้อยู่ที่ความชัดเจน พูดดี ๆ ได้แต้มเยอะกว่าทำลึกลับแบบอ่านแล้วไม่ตอบ",
+    health: "ระวังเสียงแห้ง ปวดหัว หรือกินน้ำไม่พอ ปากทำงานหนักแล้ว ร่างกายขอน้ำค่ะ",
+    closing: "อยากให้คนเห็นค่า ก็ต้องส่งของให้เขาเห็นก่อน",
+  },
+  4: {
+    title: "เงินรั่วเพราะคำว่า นิดเดียว อีกแล้ว",
+    summary: "วันนี้เรื่องเงินต้องตั้งสติก่อนจ่าย ดวงไม่ได้ห้ามซื้อของ แต่ห้ามโดน mood พาไป checkout แบบไร้ศักดิ์ศรี",
+    work: "งานกลาง ๆ ไม่พัง แต่จะช้าเพราะรายละเอียดเล็ก ๆ อ่านให้ครบก่อนตอบ โดยเฉพาะแชตที่มีคำว่า ด่วน",
+    money: "เหมาะกับการจัดงบ เคลียร์หนี้ หรือเช็กยอดค้าง อย่าซื้อของเพื่อปลอบใจทุกครั้งที่เหนื่อย กระเป๋าตังค์ไม่ได้ทำผิดอะไร",
+    love: "คนมีคู่ควรระวังพูดแรงตอนหิว คนโสดอย่าเพิ่งลงทุนความรู้สึกกับคนที่ยังให้คุณเดาอยู่ฝ่ายเดียว",
+    health: "ระวังท้องอืด กินไม่เป็นเวลา และกาแฟที่คุณเรียกว่าอาหารเช้าแบบหน้าตาเฉย",
+    closing: "เงินไม่ได้หายเอง คุณแค่ปล่อยให้คำว่า นิดเดียว ทำงานเป็นทีม",
+  },
+  5: {
+    title: "ความรักต้องใช้คำพูด ไม่ใช่พลังจิต",
+    summary: "วันนี้ดวงความรักเด่น แต่ต้องสื่อสารให้ชัด อ้อมมากไปอีกฝ่ายอาจนึกว่าคุณกำลังเขียนปริศนาอักษรไขว้",
+    work: "งานต้องใช้ความร่วมมือ ขอความช่วยเหลือได้ ไม่เสียฟอร์ม แบกคนเดียวแล้วหน้าเครียดไม่ใช่ leadership",
+    money: "เงินดีขึ้นจากการคุยหรือต่อรอง ลองถาม ลองขอส่วนลด ลองทวงแบบสุภาพแต่ไม่หายตัว",
+    love: "คนมีคู่เหมาะกับการเคลียร์ใจแบบไม่ประชด คนโสดมีคนสนใจ แต่คุณต้องเลิกทำเป็นไม่แคร์จนเขาเชื่อจริง",
+    health: "นอนให้พอและลดการคิดวนก่อนนอน สมองคุณไม่จำเป็นต้องจัดประชุมตอนตีหนึ่ง",
+    closing: "อยากได้ความสัมพันธ์ที่ชัด ก็ต้องเลิกส่งสัญญาณแบบ Wi-Fi สองขีด",
+  },
+  6: {
+    title: "วันนี้คนพร้อมช่วย แต่คุณต้องเลิกเล่นบทคนสู้ชีวิตเดี่ยว",
+    summary: "ดวงวันนี้ดีเรื่องทีม เพื่อนร่วมงาน คนรอบตัว หรือคนรักช่วยได้ ถ้าคุณยอมพูดให้เขารู้ ไม่ใช่ถอนหายใจเป็นรหัสลับ",
+    work: "งานที่ติดจะคลี่คลายถ้าถามคนที่รู้จริง อย่าเสียเวลาสามชั่วโมงเพื่อพิสูจน์ว่าดื้อได้เก่ง",
+    money: "มีรายจ่ายเพื่อแก้ปัญหาเก่า จ่ายแล้วจบ ดีกว่าประหยัดวันนี้แล้วจ่ายแพงกว่าเดิมพร้อมน้ำตา",
+    love: "ความรักต้องลดทิฐิ ขอโทษได้ก็ขอโทษ อย่าอธิบายยาวจนคำขอโทษหายไปใน presentation",
+    health: "ระวังคอ เจ็บไหล่ และความเครียดสะสม พักจริง ๆ ไม่ใช่นอนจับมือถือในท่าเดิม",
+    closing: "ขอให้ช่วยไม่ใช่แพ้ แพ้คือดื้อจนพังแล้วบอกว่าไม่เป็นไร",
+  },
+  7: {
+    title: "ข่าวดีมาแบบเล็ก ๆ อย่าดูถูกมันเพราะไม่อลัง",
+    summary: "วันนี้มีสัญญาณบวกจากเรื่องที่รออยู่ อาจไม่ใช่ jackpot แต่เป็นไฟเขียวที่ควรรับไว้",
+    work: "งานมีความคืบหน้า เหมาะกับ follow up หรือส่งเรื่องที่ค้าง อย่านั่งรอให้จักรวาลส่งอีเมลแทนคุณ",
+    money: "มีโอกาสได้เงินคืน ส่วนลด หรือรายรับเล็ก ๆ เก็บไว้ก่อน อย่าเพิ่งฉลองเหมือนได้โบนัสทั้งปี",
+    love: "ความรักอบอุ่นจากรายละเอียดเล็ก ๆ ตอบดี พูดดี จำเรื่องเล็ก ๆ ได้ คะแนนขึ้นทันที",
+    health: "ระวังตาแห้งและปวดหัวจากจอ ลดแสงหน่อย ชีวิตไม่ได้ต้อง HD ตลอดเวลา",
+    closing: "เรื่องดีเล็ก ๆ ก็ยังเป็นเรื่องดี อย่าทำตัวแพงใส่โชค",
+  },
+  8: {
+    title: "ระวังปากไวกว่าใจ วันนี้คำพูดมีแรงสะเทือน",
+    summary: "วันนี้ดวงเตือนเรื่องการสื่อสาร พูดได้ แต่อย่าพูดตอนอารมณ์ขึ้น เพราะปากคุณไม่มีปุ่ม undo",
+    work: "ประชุมหรือแชตงานต้องอ่านทวนก่อนส่ง โดยเฉพาะประโยคที่คุณคิดว่า แค่นี้เอง นั่นแหละตัวปัญหา",
+    money: "อย่าตัดสินใจการเงินตอนหงุดหงิดหรือเหนื่อย ของที่ซื้อเพื่อเอาชนะอารมณ์มักแพ้ตอนเห็นบิล",
+    love: "คนมีคู่ระวังประชดแล้วอีกฝ่ายจำแม่น คนโสดอย่า test ใจคนอื่นจนเขาสอบตกเพราะงงข้อสอบ",
+    health: "ระวังกรามตึง ปวดคอ หรือไมเกรนจากความเครียด หายใจลึก ๆ ก่อนตอบแชต",
+    closing: "วันนี้พูดน้อยลงนิด ชีวิตจะซ่อมน้อยลงเยอะ",
+  },
+  9: {
+    title: "งานใหญ่ไม่ได้น่ากลัว คุณแค่จ้องมันนานเกิน",
+    summary: "วันนี้เหมาะกับการเริ่มจัดระบบเรื่องใหญ่ ถ้าแบ่งเป็นชิ้นเล็ก คุณจะเห็นว่ามันไม่ได้เป็นปีศาจ แค่เป็นงานที่ถูกปล่อยให้อ้วน",
+    work: "ทำ checklist แล้วไล่ทีละข้อ อย่าเปิดงานแล้วปิดเพราะรู้สึกว่า โอ้โห เยอะจัง ใช่ค่ะ เพราะคุณไม่เริ่มไง",
+    money: "วางแผนรายจ่ายล่วงหน้า มีค่าใช้จ่ายเพื่ออนาคตที่ควรจ่าย แต่อย่าเพิ่มของอยากได้เข้าไปแล้วเรียกว่า ลงทุน",
+    love: "ความรักต้องอดทนกับความต่าง ไม่ต้องชนะทุกประเด็น บางทีรักกันไม่จำเป็นต้อง debate จนฟ้าสาง",
+    health: "ระวังหลังล่างและข้อมือจากการนั่งนาน ขยับก่อนที่ร่างกายจะส่งหนังสือร้องเรียน",
+    closing: "ทำทีละนิดไม่เท่ แต่เสร็จจริง ซึ่งดีกว่าเท่แล้วค้าง",
+  },
+  10: {
+    title: "วันนี้เหมาะกับการขายของ ขายไอเดีย หรือขายตัวเองแบบมีราคา",
+    summary: "ดวงเรื่องการนำเสนอเด่น ใครต้อง pitch งาน สมัครงาน คุยลูกค้า หรือขายของ วันนี้ใช้วาจาให้คุ้ม",
+    work: "พูดให้ชัดว่าคุณทำอะไรได้ อย่าถ่อมตัวจนเหมือนมาขอโทษที่เก่ง คนฟังต้องรู้ value ไม่ใช่ต้องเดาเอง",
+    money: "มีเกณฑ์ได้เงินจากการขาย แลก เปลี่ยน หรือใช้ของที่มีอยู่ให้เกิดประโยชน์ อย่าเพิ่งซื้อใหม่เพราะคำว่า fresh",
+    love: "คนโสดมีเสน่ห์จากความมั่นใจ คนมีคู่ชมกันบ้าง ไม่ใช่เก็บคำดีไว้ใช้ตอนง้อเท่านั้น",
+    health: "ระวังใช้เสียงเยอะและพักน้อย ดื่มน้ำก่อนเสียงจะกลายเป็นวิทยุคลื่นแทรก",
+    closing: "วันนี้อย่าขายตัวเองถูก โลกต่อราคาเก่งอยู่แล้ว คุณอย่าช่วยเขา",
+  },
+  11: {
+    title: "ใจเย็นก่อน อย่าเพิ่งสรุปชีวิตจากหลักฐานสองบรรทัด",
+    summary: "วันนี้อารมณ์ไวและคิดไปไกลง่าย ข้อมูลยังไม่ครบ อย่าเพิ่งตั้งโต๊ะแถลงข่าวในหัว",
+    work: "งานต้องเช็ก source และรายละเอียด อย่าฟังต่อ ๆ กันมาแล้วตัดสินใจใหญ่ เดี๋ยวได้แก้งานใหญ่กว่าเดิม",
+    money: "กันเงินสำรองไว้ก่อน วันนี้ไม่เหมาะกับการเสี่ยงเพราะเห็นคนอื่นบอกว่ากำไรดี คนอื่นไม่จ่ายบิลแทนคุณนะ",
+    love: "อย่าอ่านใจจากจุด จุด จุด หรือเวลา online ถ้าสงสัยให้ถามดี ๆ ไม่ใช่สืบจนตัวเองเหนื่อย",
+    health: "ระวังนอนไม่หลับจากการคิดวน ปิดจอก่อนนอนสักพัก สมองจะได้เลิกทำงานกะดึก",
+    closing: "ลางสังหรณ์บางทีคือความหิวปลอมตัวมา",
+  },
+  12: {
+    title: "โอกาสอยู่ใกล้ แต่คุณทำเป็นมองไม่เห็นเพราะกลัวต้องขยับ",
+    summary: "วันนี้มีจังหวะใหม่เข้ามา ไม่ใหญ่โตมาก แต่ต่อยอดได้ ถ้าคุณไม่ปล่อยผ่านด้วยข้ออ้างว่า ยังไม่พร้อม",
+    work: "เหมาะกับรับงานใหม่ ทดลองวิธีใหม่ หรือคุยกับคนใหม่ อย่ารักความลำบากเดิมจนปฏิเสธทางลัดที่ดี",
+    money: "มีทางหาเงินเพิ่มจาก skill ที่คุณมีอยู่แล้ว ลองเปิดรับงานเล็ก ๆ ก่อน ไม่ต้องรอไอเดียระดับ unicorn",
+    love: "คนโสดอาจเจอคนคุยจากวงใหม่ คนมีคู่ลองเปลี่ยน routine บ้าง ความรักไม่ได้ต้องกินเมนูเดิมทุกวัน",
+    health: "ระวังไหล่และความล้าจากการแบกทุกอย่างเอง ปล่อยบ้าง คุณไม่ใช่ชั้นวางของ",
+    closing: "โอกาสไม่ได้ซ่อน แค่คุณชอบทำเป็นหาแว่นทั้งที่แว่นอยู่บนหัว",
+  },
+  13: {
+    title: "วันนี้ต้องพูดความจริงแบบไม่ฟาดจนโต๊ะหัก",
+    summary: "ดวงเหมาะกับการเคลียร์เรื่องค้าง แต่เลือกคำให้ดี พูดตรงได้ ไม่จำเป็นต้องพูดเหมือนจะปิดบัญชีแค้น",
+    work: "มีเรื่องต้องตกลงให้ชัด โดยเฉพาะ scope งาน เวลา และความรับผิดชอบ อย่าอ้อมจนทุกคนเข้าใจคนละเรื่อง",
+    money: "เห็นช่องรั่วตรงไหนให้ปิดวันนี้ อย่าปลอบใจว่ารูเล็ก เพราะยอดรวมมันไม่เล็กตาม",
+    love: "ความสัมพันธ์ต้องการความซื่อสัตย์ พูดว่ารู้สึกอะไร ไม่ใช่ทำตัวปกติแล้วหวังให้อีกฝ่ายจับพิรุธได้เอง",
+    health: "ระวังตึงกราม ผิวแพ้ หรือปวดหัวจากความเครียด ร่างกายรับบทแทนใจมานานแล้ว",
+    closing: "ความจริงไม่ได้น่ากลัวเท่าการต้องจำเรื่องที่เราเลี่ยงไว้",
+  },
+  14: {
+    title: "ดวงพักผ่อนขึ้น แต่คุณต้องพักจริง ไม่ใช่เปลี่ยนแอป",
+    summary: "วันนี้พลังไม่เต็มร้อย เหมาะกับงานเบา งานเก็บรายละเอียด และการดูแลตัวเองแบบไม่ประชดชีวิต",
+    work: "ทำงานที่ต้องเช็ก แก้ จัดระเบียบ จะเวิร์กกว่างานบุกหนัก อย่าฝืนเป็นคน productive ถ้าสมองยัง loading",
+    money: "เหมาะกับเช็กบัญชี วางแผน และเลี่ยงซื้อของตอนง่วง เพราะตอนง่วงคุณเห็นทุกอย่างเป็นการเยียวยา",
+    love: "คนมีคู่ต้องการเวลาเงียบ ๆ ร่วมกัน คนโสดอย่ารีบหาใครมาแก้เหงาทั้งที่ตัวเองแค่ต้องนอน",
+    health: "พักตา ยืดตัว กินข้าวให้ตรงเวลา วันนี้ร่างกายไม่ได้ขอเยอะ แค่ขอให้คุณทำพื้นฐานให้ครบ",
+    closing: "บางวันการดูแลตัวเองคือความสำเร็จ ไม่ใช่ข้ออ้าง",
+  },
+  15: {
+    title: "วันนี้มีคนจับตา อย่าทำตัวเหมือนไม่มีใครเห็น",
+    summary: "ดวงงานและภาพลักษณ์เด่น สิ่งที่คุณทำจะถูกเห็นง่ายขึ้น ทั้งเรื่องดีและเรื่องที่ทำแบบลวก ๆ ด้วยนะ",
+    work: "เหมาะกับส่งงาน โชว์ผลงาน หรือคุยกับหัวหน้า แต่เช็กให้เรียบร้อยก่อน อย่าส่งแล้วภาวนาให้ typo อายแทน",
+    money: "รายรับมีโอกาสเพิ่มจากผลงานหรือความน่าเชื่อถือ อย่าลดราคาเร็วเกินไป แค่เพราะกลัวคนไม่เลือก",
+    love: "เสน่ห์มาจากความมั่นใจแบบไม่อวด คนมีคู่ควรให้เครดิตกันบ้าง คนโสดยิ้มดี ๆ วันนี้มีคนมอง",
+    health: "ระวังเครียดจากการอยากทำให้ดีทุกอย่าง หายใจหน่อย ไม่ต้องเป็นเวอร์ชัน premium ตลอดเวลา",
+    closing: "วันนี้คนเห็นคุณอยู่แล้ว ทำให้เขาเห็นของดี ไม่ใช่เห็นความลน",
+  },
+  16: {
+    title: "เรื่องเก่ากลับมา ไม่ได้แปลว่าต้องกลับไปเป็นคนเดิม",
+    summary: "วันนี้มีโอกาสเจอปัญหาเก่า คนเก่า หรืองานเก่า แต่รอบนี้คุณมีข้อมูลมากขึ้น ใช้ให้เป็น ไม่ใช่วนฉายซ้ำ",
+    work: "งานเก่าที่เคยทำไว้จะมีประโยชน์ เอามาปรับใช้ได้ อย่าดูถูกประสบการณ์ตัวเองเพราะมันไม่ shiny",
+    money: "เหมาะกับเก็บเงิน เคลียร์ของเก่า ขายของที่ไม่ได้ใช้ อย่าซื้อใหม่เพราะอยากเริ่มต้นชีวิตใหม่ทุกวัน",
+    love: "คนเก่าอาจทัก หรือเรื่องเดิมอาจถูกพูดถึง ถ้าจะกลับไปคุย ต้องดูพฤติกรรม ไม่ใช่ดูแค่ความคิดถึง",
+    health: "ระวังปวดท้องหรือเครียดลงกระเพาะ กินให้ดี อย่าปล่อยให้ความรู้สึกเป็นเชฟประจำวัน",
+    closing: "อดีตกลับมาได้ แต่คุณไม่จำเป็นต้องสมัครบทเดิม",
+  },
+  17: {
+    title: "วันนี้ต้องกล้าขอ กล้าถาม กล้าทวง แบบไม่ทำเสียงเล็ก",
+    summary: "ดวงการเจรจาดี แต่คุณต้องพูดความต้องการให้ชัด อย่าหวังให้คนอื่นเข้าใจจากสีหน้าครึ่งวินาที",
+    work: "เหมาะกับขอ feedback ขอ deadline ชัด ๆ หรือทวงคำตอบ อย่าปล่อยงานลอยเหมือนลูกโป่งในห้าง",
+    money: "ถ้ามีเงินค้าง ต้องทวงได้แล้ว พูดสุภาพแต่ชัดเจน เงินของคุณ ไม่ใช่ของฝากระยะยาว",
+    love: "คนมีคู่ควรบอกตรง ๆ ว่าอยากได้อะไร คนโสดถ้าชอบใครก็แสดงออกพอดี ๆ ไม่ใช่แกล้งเย็นจนเป็นน้ำแข็ง",
+    health: "ระวังคอแห้งและความเครียดจากการเก็บคำพูดไว้เยอะ พูดให้จบจะเบากว่ากลืนไว้",
+    closing: "คนอื่นไม่ได้ไม่ให้เสมอไป บางทีคุณแค่ยังไม่ขอ",
+  },
+  18: {
+    title: "ดวงดีแบบต้องมีวินัย ไม่ใช่ดีแบบนอนรอ",
+    summary: "วันนี้ผลลัพธ์ดีถ้าคุณทำต่อเนื่อง เรื่องที่สะสมไว้เริ่มออกดอก แต่ต้องรดน้ำต่อ ไม่ใช่ถ่ายรูปแล้วพอ",
+    work: "งานที่ทำซ้ำ ๆ จะเริ่มเห็นผล เหมาะกับ routine, follow up, และเก็บงานละเอียด ความสม่ำเสมอชนะไฟสามนาที",
+    money: "เงินดีจากวินัย เก็บนิดละหน่อยได้ผล อย่าเพิ่งฉลองด้วยการทำลายวินัยที่เพิ่งสร้างมา",
+    love: "ความรักมั่นคงขึ้นจากการใส่ใจเล็ก ๆ สม่ำเสมอ ไม่ต้องจัดใหญ่ปีละครั้งแล้วหายยาว",
+    health: "เหมาะกับเริ่มนิสัยเล็ก ๆ เช่นดื่มน้ำ เดิน ยืดตัว อย่าตั้งเป้าใหญ่จนตัวเองกลัวแล้วหนี",
+    closing: "ชีวิตดีขึ้นจากสิ่งเล็ก ๆ ที่ทำจริง ไม่ใช่สิ่งใหญ่ ๆ ที่เล่าเก่ง",
+  },
+  19: {
+    title: "วันนี้อย่าใจร้อน โลกไม่ได้ช้า คุณแค่อยากให้ทุกอย่างเสร็จเมื่อวาน",
+    summary: "ดวงวันนี้ต้องใช้ความอดทน มีเรื่องรอ เรื่องเลื่อน หรือคนตอบช้า อย่าเพิ่งสติแตกใส่ทุกระบบ",
+    work: "งานมี delay ได้ แต่ยังไปต่อได้ ใช้เวลารอเช็กงานหรือเตรียมแผนสำรอง อย่าเอาแต่ refresh แล้วทำหน้าเหมือนระบบติดหนี้",
+    money: "รายจ่ายยังคุมได้ถ้าไม่ซื้อของแก้หงุดหงิด วันนี้อารมณ์ร้อนทำให้เงินเย็นหายเร็วมาก",
+    love: "ความรักต้องให้พื้นที่บ้าง คนตอบช้าไม่ได้แปลว่าโลกแตก ถ้ากังวลให้ถาม ไม่ใช่แต่งนิยายเองสามตอน",
+    health: "ระวังอารมณ์ร้อน ปวดหัว และรีบจนสะดุด ช้าลงนิด ชีวิตไม่ใช่เกมจับเวลา",
+    closing: "บางอย่างช้าเพราะต้องใช้เวลา ไม่ใช่เพราะจักรวาลแกล้งคุณคนเดียว",
+  },
+  20: {
+    title: "วันนี้เหมาะกับการปิดจบ ไม่ใช่เปิดเรื่องใหม่เพิ่มอีกสิบ",
+    summary: "ดวงดีสำหรับการเคลียร์งาน คุยให้จบ และตัดสินใจเรื่องที่ค้าง อย่าเพิ่มภารกิจใหม่เพราะกลัวความว่าง",
+    work: "เลือกงานที่ใกล้เสร็จแล้วปิดให้เรียบร้อย งานใหม่จดไว้ก่อน อย่ารับทุกอย่างจน calendar ดูเหมือนสนามรบ",
+    money: "เหมาะกับเคลียร์บิล จ่ายของจำเป็น และจัดการเอกสารการเงิน เรื่องน่าเบื่อวันนี้จะช่วยคุณไม่ปวดหัวพรุ่งนี้",
+    love: "คนมีคู่ควรเคลียร์เรื่องค้างด้วยน้ำเสียงดี ๆ คนโสดปล่อยคนที่ไม่ชัดไปก่อน มือว่างบ้างก็ดี",
+    health: "ระวังล้าสะสมจากการทำหลายอย่างพร้อมกัน พักเป็นช่วง ๆ อย่ารอให้หมดแรงแล้วค่อยเรียกว่าพัก",
+    closing: "ปิดจบหนึ่งเรื่องวันนี้ จะโล่งกว่าฝันถึงสิบเรื่องที่ยังไม่เริ่ม",
+  },
+};
+
 const thaiDigits = ["๐", "๑", "๒", "๓", "๔", "๕", "๖", "๗", "๘", "๙"];
 
 function toThaiNumber(value: number | string) {
@@ -311,6 +509,10 @@ function scoreLabel(score: number) {
   return ["พอใช้", "พอใช้", "ดี", "ดีมาก", "ดีมาก"][score - 1] ?? "ดี";
 }
 
+function formatClearFortuneText(fortune: ClearFortune) {
+  return `${fortune.summary} ${fortune.work} ${fortune.money} ${fortune.love} ${fortune.health}`;
+}
+
 export default function Home() {
   const [view, setView] = useState<View>("shake");
   const [draw, setDraw] = useState<DailyDraw | null>(null);
@@ -320,16 +522,23 @@ export default function Home() {
   const [isDragging, setIsDragging] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [hideTutorialNextTime, setHideTutorialNextTime] = useState(false);
   const [shareState, setShareState] = useState("แชร์ดวงประจำวัน");
   const [countdown, setCountdown] = useState(() => getTimeRemaining());
+  const [motionPermission, setMotionPermission] = useState<MotionPermission>("unknown");
   const lastPoint = useRef<{ x: number; y: number; time: number } | null>(null);
+  const hoverPoint = useRef<{ x: number; y: number; time: number } | null>(null);
   const fortunePaperRef = useRef<HTMLElement>(null);
   const isCapturing = useRef(false);
+  const motionPermissionRef = useRef<MotionPermission>("unknown");
 
   const fortune = useMemo(
     () => fortunes.find((item) => item.number === draw?.fortuneNumber) ?? fortunes[0],
     [draw],
   );
+  const clearFortune = clearFortunes[fortune.number] ?? null;
+  const fortuneText = clearFortune ? formatClearFortuneText(clearFortune) : fortune.text;
 
   useEffect(() => {
     window.setTimeout(() => {
@@ -354,6 +563,7 @@ export default function Home() {
       }
 
       setDraw(buildDailyDraw(userId, dateKey));
+      setShowTutorial(window.localStorage.getItem(TUTORIAL_HIDDEN_KEY) !== "true");
     }, 0);
   }, []);
 
@@ -365,6 +575,10 @@ export default function Home() {
       window.clearInterval(timer);
     };
   }, []);
+
+  useEffect(() => {
+    motionPermissionRef.current = motionPermission;
+  }, [motionPermission]);
 
   const completeDraw = useCallback(() => {
     if (view !== "shake") return;
@@ -401,9 +615,42 @@ export default function Home() {
     [completeDraw, isMuted, view],
   );
 
+  const requestMotionAccess = useCallback(async () => {
+    const MotionEvent = window.DeviceMotionEvent as DeviceMotionEventConstructor | undefined;
+
+    if (!MotionEvent) {
+      setMotionPermission("unsupported");
+      return false;
+    }
+
+    if (typeof MotionEvent.requestPermission !== "function") {
+      setMotionPermission("granted");
+      return true;
+    }
+
+    if (motionPermissionRef.current === "granted") return true;
+    if (motionPermissionRef.current === "requesting") return false;
+
+    setMotionPermission("requesting");
+
+    try {
+      const permission = await MotionEvent.requestPermission();
+      const isGranted = permission === "granted";
+      setMotionPermission(isGranted ? "granted" : "denied");
+      return isGranted;
+    } catch {
+      setMotionPermission("denied");
+      return false;
+    }
+  }, []);
+
   useEffect(() => {
     const handleMotion = (event: DeviceMotionEvent) => {
       const acceleration = event.accelerationIncludingGravity;
+      if (acceleration && motionPermissionRef.current !== "granted") {
+        setMotionPermission("granted");
+      }
+
       const force =
         Math.abs(acceleration?.x ?? 0) +
         Math.abs(acceleration?.y ?? 0) +
@@ -418,7 +665,36 @@ export default function Home() {
     return () => window.removeEventListener("devicemotion", handleMotion);
   }, [addShake, view]);
 
+  function registerPointerShake(
+    current: { x: number; y: number; time: number },
+    previous: { x: number; y: number; time: number },
+    boost = 1,
+  ) {
+    const dx = current.x - previous.x;
+    const dy = current.y - previous.y;
+    const elapsed = Math.max(12, current.time - previous.time);
+    const distance = Math.hypot(dx, dy);
+    const velocity = distance / elapsed;
+
+    if (distance > 3) {
+      addShake(distance * (1.45 + velocity * boost), dx * 0.55);
+      return true;
+    }
+
+    return false;
+  }
+
+  function closeTutorial() {
+    if (hideTutorialNextTime) {
+      window.localStorage.setItem(TUTORIAL_HIDDEN_KEY, "true");
+    }
+
+    setShowTutorial(false);
+    void requestMotionAccess();
+  }
+
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
+    void requestMotionAccess();
     event.currentTarget.setPointerCapture(event.pointerId);
     setIsDragging(true);
     lastPoint.current = {
@@ -428,24 +704,43 @@ export default function Home() {
     };
   }
 
+  function onPointerEnter(event: PointerEvent<HTMLDivElement>) {
+    if (event.pointerType !== "mouse") return;
+
+    hoverPoint.current = {
+      x: event.clientX,
+      y: event.clientY,
+      time: performance.now(),
+    };
+  }
+
   function onPointerMove(event: PointerEvent<HTMLDivElement>) {
-    if (!isDragging || !lastPoint.current) return;
-
     const now = performance.now();
-    const dx = event.clientX - lastPoint.current.x;
-    const dy = event.clientY - lastPoint.current.y;
-    const elapsed = Math.max(12, now - lastPoint.current.time);
-    const distance = Math.hypot(dx, dy);
-    const velocity = distance / elapsed;
+    const currentPoint = {
+      x: event.clientX,
+      y: event.clientY,
+      time: now,
+    };
 
-    if (distance > 3) {
-      addShake(distance * (1.5 + velocity), dx * 0.55);
-      lastPoint.current = {
-        x: event.clientX,
-        y: event.clientY,
-        time: now,
-      };
+    if (isDragging && lastPoint.current) {
+      if (registerPointerShake(currentPoint, lastPoint.current, 1)) {
+        lastPoint.current = currentPoint;
+      }
+
+      return;
     }
+
+    if (event.pointerType !== "mouse") return;
+
+    if (hoverPoint.current && registerPointerShake(currentPoint, hoverPoint.current, 2.8)) {
+      hoverPoint.current = currentPoint;
+    } else if (!hoverPoint.current) {
+      hoverPoint.current = currentPoint;
+    }
+  }
+
+  function onPointerLeave() {
+    hoverPoint.current = null;
   }
 
   function onPointerUp() {
@@ -531,15 +826,25 @@ export default function Home() {
         >
           <SoundIcon muted={isMuted} />
         </button>
-        <button
-          className="history-action"
-          type="button"
-          onClick={() => setShowHistory(true)}
-          aria-label="เปิดประวัติ"
-        >
-          <CalendarIcon />
-          <span>ประวัติ</span>
-        </button>
+        <div className="top-action-group">
+          <button
+            className="round-action"
+            type="button"
+            onClick={() => setShowTutorial(true)}
+            aria-label="ดูวิธีเล่น"
+          >
+            <InfoIcon />
+          </button>
+          <button
+            className="history-action"
+            type="button"
+            onClick={() => setShowHistory(true)}
+            aria-label="เปิดประวัติ"
+          >
+            <CalendarIcon />
+            <span>ประวัติ</span>
+          </button>
+        </div>
       </nav>
 
       {view !== "reveal" ? (
@@ -557,13 +862,15 @@ export default function Home() {
           <div
             className={`siamsi-stage ${isDragging ? "is-shaking" : ""} ${view === "dropping" ? "is-dropping" : ""}`}
             onPointerDown={onPointerDown}
+            onPointerEnter={onPointerEnter}
             onPointerMove={onPointerMove}
+            onPointerLeave={onPointerLeave}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
             style={{ "--tilt": `${tilt}deg` } as React.CSSProperties}
             role="button"
             tabIndex={0}
-            aria-label="ลากเพื่อเขย่ากระบอกเซียมซี"
+            aria-label="เขย่ากระบอกเซียมซี"
           >
             <div className="stick-fall">
               <div className="fortune-stick dropped">
@@ -574,14 +881,7 @@ export default function Home() {
             <SiamsiSVG />
           </div>
 
-          <button className="shake-cta" type="button" onClick={() => addShake(150, tilt >= 0 ? -15 : 15)}>
-            <HandIcon />
-            <span>
-              <strong>เขย่าเซียมซี</strong>
-              <small>หรือ ลากกระบอกเพื่อเขย่า</small>
-            </span>
-            <ChevronIcon />
-          </button>
+          <p className="shake-hint">ขยับเมาส์ซ้ายขวาบนกระบอก หรือเขย่าโทรศัพท์</p>
           <div className="shake-progress" aria-label={`พลังเขย่า ${progress}%`}>
             <span style={{ width: `${progress}%` }} />
           </div>
@@ -596,19 +896,19 @@ export default function Home() {
                 <p className="paper-score">{draw ? starRating(draw.score) : "★★★☆☆"}</p>
                 <p className="paper-kicker">ใบที่ {toThaiNumber(fortune.number)} · {draw ? formatShareDate(draw.date) : ""}</p>
               </div>
-              <h1 className="paper-title">{fortune.title}</h1>
+              <h1 className="paper-title">{clearFortune?.title ?? fortune.title}</h1>
               <hr className="paper-rule" />
-              <p className="fortune-text">{fortune.text}</p>
+              <p className="fortune-text">{fortuneText}</p>
               <div className="fortune-closing">
                 <span className="fortune-closing-deco" aria-hidden="true">&rdquo;</span>
-                {fortune.closing}
+                {clearFortune?.closing ?? fortune.closing}
               </div>
               <hr className="paper-rule" />
               <div className="score-bars">
                 {[
-                  { label: "💼 การงาน", value: draw?.workScore ?? 60 },
-                  { label: "💰 การเงิน", value: draw?.moneyScore ?? 60 },
-                  { label: "❤️ ความรัก", value: draw?.loveScore ?? 60 },
+                  { label: `💼 การงาน · ${scoreLabel(draw?.score ?? 3)}`, value: draw?.workScore ?? 60 },
+                  { label: `💰 การเงิน · ${scoreLabel(draw?.score ?? 3)}`, value: draw?.moneyScore ?? 60 },
+                  { label: `❤️ ความรัก · ${scoreLabel(draw?.score ?? 3)}`, value: draw?.loveScore ?? 60 },
                 ].map(({ label, value }) => (
                   <div className="score-bar-row" key={label}>
                     <span className="score-bar-label">{label}</span>
@@ -654,6 +954,62 @@ export default function Home() {
             ) : (
               <p className="empty-history">ยังไม่มีประวัติการเสี่ยงทาย</p>
             )}
+          </div>
+        </div>
+      ) : null}
+
+      {showTutorial ? (
+        <div className="tutorial-overlay" role="dialog" aria-modal="true" aria-label="วิธีเล่น">
+          <div className="tutorial-panel">
+            <div className="tutorial-header">
+              <span className="tutorial-icon" aria-hidden="true">
+                <InfoIcon />
+              </span>
+              <div>
+                <p>เล่นยังไง</p>
+                <h2>เขย่าให้ใบเซียมซีหล่น</h2>
+              </div>
+            </div>
+            <ol className="tutorial-steps">
+              <li>
+                <span className="tutorial-graphic" aria-hidden="true">
+                  <SlideBucketIcon />
+                </span>
+                <span className="tutorial-copy">
+                  <strong>คอมพิวเตอร์</strong>
+                  <span>แกว่งเมาส์ซ้ายขวาบนกระบอก</span>
+                </span>
+              </li>
+              <li>
+                <span className="tutorial-graphic" aria-hidden="true">
+                  <PhoneShakeIcon />
+                </span>
+                <span className="tutorial-copy">
+                  <strong>มือถือ</strong>
+                  <span>เขย่าเครื่อง หรือแตะลากไปมา</span>
+                </span>
+              </li>
+              <li>
+                <span className="tutorial-graphic" aria-hidden="true">
+                  <PermissionIcon />
+                </span>
+                <span className="tutorial-copy">
+                  <strong>iPhone Safari</strong>
+                  <span>กดอนุญาตเมื่อระบบถาม</span>
+                </span>
+              </li>
+            </ol>
+            <label className="tutorial-check">
+              <input
+                type="checkbox"
+                checked={hideTutorialNextTime}
+                onChange={(event) => setHideTutorialNextTime(event.currentTarget.checked)}
+              />
+              <span>ไม่ต้องแสดงอีก</span>
+            </label>
+            <button className="tutorial-start" type="button" onClick={closeTutorial}>
+              เริ่มเสี่ยงทาย
+            </button>
           </div>
         </div>
       ) : null}
@@ -808,6 +1164,16 @@ function CalendarIcon() {
   );
 }
 
+function InfoIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 11.5v4.8" />
+      <path d="M12 7.5h.1" />
+    </svg>
+  );
+}
+
 function FlowerIcon() {
   return (
     <svg viewBox="0 0 28 28" aria-hidden="true">
@@ -817,23 +1183,50 @@ function FlowerIcon() {
   );
 }
 
-function HandIcon() {
+function SlideBucketIcon() {
   return (
-    <svg viewBox="0 0 28 28" aria-hidden="true">
-      <path d="M9.5 13.5V6.8a1.6 1.6 0 0 1 3.2 0V13" />
-      <path d="M12.7 13V5.4a1.7 1.7 0 0 1 3.4 0v8" />
-      <path d="M16.1 13.5V7.3a1.6 1.6 0 0 1 3.2 0v8.2" />
-      <path d="M19.3 15.5v-3a1.5 1.5 0 1 1 3 0v4.8c0 5.1-3.4 8.2-8.1 8.2-4 0-6-2.1-7.7-5.1L4 16a1.7 1.7 0 0 1 2.9-1.7l2 3.1" />
-      <path d="M5.5 5.5 3.4 3.4M7 2.5V0M2.5 8H0" />
+    <svg viewBox="0 0 120 92" aria-hidden="true">
+      <path className="motion-line" d="M17 72 C34 58, 48 58, 64 72 S93 86, 107 72" />
+      <path className="motion-arrow" d="M23 50h28" />
+      <path className="motion-arrow" d="m42 42 9 8-9 8" />
+      <path className="motion-arrow" d="M97 50H69" />
+      <path className="motion-arrow" d="m78 42-9 8 9 8" />
+      <g transform="translate(43 19) rotate(-6 17 31)">
+        <path className="mini-stick" d="M9 4h8l-1 45H10Z" />
+        <path className="mini-stick" d="M20 2h8l-1 47H21Z" />
+        <path className="mini-bucket" d="M4 32h34l-5 36H9Z" />
+        <path className="mini-rim" d="M2 30h38" />
+      </g>
     </svg>
   );
 }
 
-function ChevronIcon() {
+function PhoneShakeIcon() {
   return (
-    <svg viewBox="0 0 28 28" aria-hidden="true">
-      <path d="m9 7 7 7-7 7" />
-      <path d="m16 7 7 7-7 7" />
+    <svg viewBox="0 0 120 92" aria-hidden="true">
+      <path className="motion-line" d="M22 22 C10 36, 10 57, 24 70" />
+      <path className="motion-line" d="M96 22 C110 37, 109 58, 95 70" />
+      <g transform="translate(42 13) rotate(-9 18 32)">
+        <rect className="phone-shell" x="0" y="0" width="36" height="64" rx="8" />
+        <path className="phone-screen" d="M6 11h24v40H6Z" />
+        <path className="phone-bucket" d="M13 27h10l-2 13h-6Z" />
+        <path className="phone-dot" d="M17 56h2" />
+      </g>
+      <path className="motion-arrow" d="m28 16-5 6 7 4" />
+      <path className="motion-arrow" d="m92 16 5 6-7 4" />
+    </svg>
+  );
+}
+
+function PermissionIcon() {
+  return (
+    <svg viewBox="0 0 120 92" aria-hidden="true">
+      <rect className="permission-card" x="18" y="18" width="84" height="56" rx="12" />
+      <circle className="permission-badge" cx="42" cy="46" r="14" />
+      <path className="permission-check" d="m35 46 5 5 10-12" />
+      <path className="permission-line" d="M62 36h24" />
+      <path className="permission-line short" d="M62 48h19" />
+      <path className="permission-pill" d="M63 60h25" />
     </svg>
   );
 }
