@@ -501,12 +501,45 @@ function scoreBlocks(score: number) {
   return "🟩".repeat(score) + "⬛".repeat(5 - score);
 }
 
-function starRating(score: number) {
-  return "★".repeat(score) + "☆".repeat(5 - score);
-}
-
 function scoreLabel(score: number) {
   return ["พอใช้", "พอใช้", "ดี", "ดีมาก", "ดีมาก"][score - 1] ?? "ดี";
+}
+
+function RatingStars({ score }: { score: number }) {
+  return (
+    <div className="paper-rating" aria-label={`คะแนนดวง ${score} จาก 5 ดาว`}>
+      {Array.from({ length: 5 }, (_, index) => {
+        const filled = index < score;
+
+        return (
+          <span
+            className={`paper-star ${filled ? "is-filled" : ""}`}
+            key={index}
+            aria-hidden="true"
+            style={{ "--star-index": index } as React.CSSProperties}
+          >
+            <svg viewBox="0 0 48 48" focusable="false">
+              <path d="M24 3.7 29.8 17l14.5 1.3-10.9 9.6 3.2 14.2L24 34.7l-12.6 7.4 3.2-14.2L3.7 18.3 18.2 17 24 3.7Z" />
+              <path className="paper-star-shine" d="M20.7 10.2 23 5.3l2.7 10.1 9.7 1.4-9.3 1.2c-4.9.6-8.4-3.5-5.4-7.8Z" />
+            </svg>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function PhraseTitle({ title }: { title: string }) {
+  return (
+    <>
+      {title.split(" ").map((part, index, parts) => (
+        <span className="title-phrase" key={`${part}-${index}`}>
+          {part}
+          {index < parts.length - 1 ? " " : ""}
+        </span>
+      ))}
+    </>
+  );
 }
 
 function formatClearFortuneText(fortune: ClearFortune) {
@@ -524,11 +557,10 @@ export default function Home() {
   const [showHistory, setShowHistory] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [hideTutorialNextTime, setHideTutorialNextTime] = useState(false);
-  const [shareState, setShareState] = useState("แชร์ดวงประจำวัน");
+  const [shareState, setShareState] = useState("บันทึกเป็นรูป");
   const [countdown, setCountdown] = useState(() => getTimeRemaining());
   const [motionPermission, setMotionPermission] = useState<MotionPermission>("unknown");
   const lastPoint = useRef<{ x: number; y: number; time: number } | null>(null);
-  const hoverPoint = useRef<{ x: number; y: number; time: number } | null>(null);
   const fortunePaperRef = useRef<HTMLElement>(null);
   const isCapturing = useRef(false);
   const motionPermissionRef = useRef<MotionPermission>("unknown");
@@ -704,17 +736,9 @@ export default function Home() {
     };
   }
 
-  function onPointerEnter(event: PointerEvent<HTMLDivElement>) {
-    if (event.pointerType !== "mouse") return;
-
-    hoverPoint.current = {
-      x: event.clientX,
-      y: event.clientY,
-      time: performance.now(),
-    };
-  }
-
   function onPointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (!isDragging || !lastPoint.current) return;
+
     const now = performance.now();
     const currentPoint = {
       x: event.clientX,
@@ -722,25 +746,9 @@ export default function Home() {
       time: now,
     };
 
-    if (isDragging && lastPoint.current) {
-      if (registerPointerShake(currentPoint, lastPoint.current, 1)) {
-        lastPoint.current = currentPoint;
-      }
-
-      return;
+    if (registerPointerShake(currentPoint, lastPoint.current, 1)) {
+      lastPoint.current = currentPoint;
     }
-
-    if (event.pointerType !== "mouse") return;
-
-    if (hoverPoint.current && registerPointerShake(currentPoint, hoverPoint.current, 2.8)) {
-      hoverPoint.current = currentPoint;
-    } else if (!hoverPoint.current) {
-      hoverPoint.current = currentPoint;
-    }
-  }
-
-  function onPointerLeave() {
-    hoverPoint.current = null;
   }
 
   function onPointerUp() {
@@ -749,11 +757,11 @@ export default function Home() {
     lastPoint.current = null;
   }
 
-  async function shareFortune() {
+  async function saveFortuneImage() {
     if (!draw || !fortunePaperRef.current || isCapturing.current) return;
 
     isCapturing.current = true;
-    setShareState("กำลังสร้างรูป…");
+    setShareState("กำลังบันทึกรูป…");
 
     try {
       const { default: html2canvas } = await import("html2canvas");
@@ -766,6 +774,7 @@ export default function Home() {
           el.style.animation = "none";
           el.style.opacity = "1";
           el.style.transform = "none";
+          el.classList.add("is-exporting");
         },
       });
 
@@ -775,28 +784,17 @@ export default function Home() {
 
       if (!blob) throw new Error("blob failed");
 
-      const file = new File([blob], "duangdle.png", { type: "image/png" });
-
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: "ดวงประจำวัน · daungdle.com" });
-        setShareState("แชร์ดวงประจำวัน");
-      } else {
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement("a");
-        anchor.href = url;
-        anchor.download = "duangdle-fortune.png";
-        anchor.click();
-        URL.revokeObjectURL(url);
-        setShareState("บันทึกรูปแล้ว");
-        window.setTimeout(() => setShareState("แชร์ดวงประจำวัน"), 2000);
-      }
-    } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") {
-        setShareState("แชร์ดวงประจำวัน");
-      } else {
-        setShareState("เกิดข้อผิดพลาด");
-        window.setTimeout(() => setShareState("แชร์ดวงประจำวัน"), 2000);
-      }
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "duangdle-fortune.png";
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setShareState("บันทึกรูปแล้ว");
+      window.setTimeout(() => setShareState("บันทึกเป็นรูป"), 2000);
+    } catch {
+      setShareState("เกิดข้อผิดพลาด");
+      window.setTimeout(() => setShareState("บันทึกเป็นรูป"), 2000);
     } finally {
       isCapturing.current = false;
     }
@@ -862,9 +860,7 @@ export default function Home() {
           <div
             className={`siamsi-stage ${isDragging ? "is-shaking" : ""} ${view === "dropping" ? "is-dropping" : ""}`}
             onPointerDown={onPointerDown}
-            onPointerEnter={onPointerEnter}
             onPointerMove={onPointerMove}
-            onPointerLeave={onPointerLeave}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
             style={{ "--tilt": `${tilt}deg` } as React.CSSProperties}
@@ -881,7 +877,7 @@ export default function Home() {
             <SiamsiSVG />
           </div>
 
-          <p className="shake-hint">ขยับเมาส์ซ้ายขวาบนกระบอก หรือเขย่าโทรศัพท์</p>
+          <p className="shake-hint">คลิกค้างแล้วลากซ้ายขวาบนกระบอก หรือเขย่าโทรศัพท์</p>
           <div className="shake-progress" aria-label={`พลังเขย่า ${progress}%`}>
             <span style={{ width: `${progress}%` }} />
           </div>
@@ -891,17 +887,18 @@ export default function Home() {
           <div className="reveal-scroll">
             <article className="fortune-paper" ref={fortunePaperRef}>
               <div className="paper-lines" aria-hidden="true" />
-              <span className="paper-site">daungdle.com</span>
               <div className="paper-stars-block">
-                <p className="paper-score">{draw ? starRating(draw.score) : "★★★☆☆"}</p>
                 <p className="paper-kicker">ใบที่ {toThaiNumber(fortune.number)} · {draw ? formatShareDate(draw.date) : ""}</p>
+                <RatingStars score={draw?.score ?? 3} />
               </div>
-              <h1 className="paper-title">{clearFortune?.title ?? fortune.title}</h1>
+              <h1 className="paper-title">
+                <PhraseTitle title={clearFortune?.title ?? fortune.title} />
+              </h1>
               <hr className="paper-rule" />
               <p className="fortune-text">{fortuneText}</p>
               <div className="fortune-closing">
                 <span className="fortune-closing-deco" aria-hidden="true">&rdquo;</span>
-                {clearFortune?.closing ?? fortune.closing}
+                <span className="fortune-closing-text">{clearFortune?.closing ?? fortune.closing}</span>
               </div>
               <hr className="paper-rule" />
               <div className="score-bars">
@@ -919,11 +916,14 @@ export default function Home() {
                   </div>
                 ))}
               </div>
+              <span className="paper-site">
+                <span className="paper-site-text">duangdle.com</span>
+              </span>
             </article>
           </div>
           <div className="reveal-footer">
-            <button type="button" className="reveal-share-btn" onClick={shareFortune}>
-              🔮 {shareState}
+            <button type="button" className="reveal-share-btn" onClick={saveFortuneImage}>
+              📥 {shareState}
             </button>
             <p className="reveal-countdown">
               คุณเสี่ยงทายดวงวันนี้แล้ว กลับมาใหม่อีกครั้งในเวลา <strong>{countdown}</strong>
